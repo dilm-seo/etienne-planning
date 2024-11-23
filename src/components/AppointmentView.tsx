@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { DatePicker } from './DatePicker';
 import { AppointmentCard } from './AppointmentCard';
+import { Pagination } from './Pagination';
 import { SheetAnalysis } from '../utils/excelAnalyzer';
 import { getTodayString, findClosestDate, parseAppointmentDate } from '../utils/dateUtils';
-import { Calendar, Users, AlertCircle } from 'lucide-react';
+import { Calendar, Users, AlertCircle, Search, Filter, SortAsc, MapPin, ListFilter } from 'lucide-react';
 
 interface AppointmentViewProps {
   data: SheetAnalysis;
 }
+
+const ITEMS_PER_PAGE = 10;
 
 export function AppointmentView({ data }: AppointmentViewProps) {
   const appointments = useMemo(() => {
@@ -28,51 +31,72 @@ export function AppointmentView({ data }: AppointmentViewProps) {
         if (date) dates.add(date);
       }
     });
-    return Array.from(dates).sort((a, b) => {
-      if (a === 'all') return -1;
-      if (b === 'all') return 1;
-      return parseAppointmentDate(a).getTime() - parseAppointmentDate(b).getTime();
-    });
+    return dates;
   }, [appointments]);
 
-  const uniqueTechs = useMemo(() => {
-    const techs = new Set(['all']);
+  const uniqueLocations = useMemo(() => {
+    const locations = new Set(['all']);
     appointments.forEach(apt => {
-      if (apt['TECHNICIEN']) techs.add(apt['TECHNICIEN']);
+      if (apt['LOCALISATION']) locations.add(apt['LOCALISATION']);
     });
-    return Array.from(techs);
+    return locations;
   }, [appointments]);
 
   const today = getTodayString();
-  const initialDate = findClosestDate(uniqueDates, today);
-
-  const [selectedDate, setSelectedDate] = useState(initialDate);
-  const [selectedTech, setSelectedTech] = useState('all');
+  const [selectedDate, setSelectedDate] = useState(findClosestDate(Array.from(uniqueDates), today));
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedLocation, setSelectedLocation] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'date' | 'tech' | 'location'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedDate, selectedLocation, selectedStatus, searchQuery, sortBy, sortOrder]);
 
   const filteredAppointments = useMemo(() => {
     return appointments.filter(apt => {
       if (selectedDate !== 'all' && !apt['RDV']?.startsWith(selectedDate)) return false;
-      if (selectedTech !== 'all' && apt['TECHNICIEN'] !== selectedTech) return false;
+      if (selectedLocation !== 'all' && apt['LOCALISATION'] !== selectedLocation) return false;
       if (selectedStatus === 'urgent' && !apt['JUSTIFICATION']?.toLowerCase().includes('urgent')) return false;
       if (selectedStatus === 'normal' && apt['JUSTIFICATION']?.toLowerCase().includes('urgent')) return false;
+      
+      if (searchQuery) {
+        const searchLower = searchQuery.toLowerCase();
+        return (
+          apt['RITM']?.toLowerCase().includes(searchLower) ||
+          apt['LOCALISATION']?.toLowerCase().includes(searchLower) ||
+          apt['ARTICLE']?.toLowerCase().includes(searchLower) ||
+          apt['JUSTIFICATION']?.toLowerCase().includes(searchLower)
+        );
+      }
+      
       return true;
     }).sort((a, b) => {
+      let comparison = 0;
+      
       if (sortBy === 'date') {
-        return parseAppointmentDate(a['RDV']?.split(' ')[0]).getTime() - 
-               parseAppointmentDate(b['RDV']?.split(' ')[0]).getTime();
+        comparison = parseAppointmentDate(a['RDV']?.split(' ')[0]).getTime() - 
+                    parseAppointmentDate(b['RDV']?.split(' ')[0]).getTime();
+      } else if (sortBy === 'tech') {
+        comparison = (a['TECHNICIEN'] || '').localeCompare(b['TECHNICIEN'] || '');
+      } else {
+        comparison = (a['LOCALISATION'] || '').localeCompare(b['LOCALISATION'] || '');
       }
-      if (sortBy === 'tech') {
-        return (a['TECHNICIEN'] || '').localeCompare(b['TECHNICIEN'] || '');
-      }
-      return (a['LOCALISATION'] || '').localeCompare(b['LOCALISATION'] || '');
+      
+      return sortOrder === 'asc' ? comparison : -comparison;
     });
-  }, [appointments, selectedDate, selectedTech, selectedStatus, sortBy]);
+  }, [appointments, selectedDate, selectedLocation, selectedStatus, searchQuery, sortBy, sortOrder]);
+
+  const totalPages = Math.ceil(filteredAppointments.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedAppointments = filteredAppointments.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         <DatePicker
           selectedDate={selectedDate}
           onChange={(date) => {
@@ -83,44 +107,79 @@ export function AppointmentView({ data }: AppointmentViewProps) {
               setSelectedDate('all');
             }
           }}
-          availableDates={new Set(uniqueDates)}
+          availableDates={uniqueDates}
         />
 
-        <select
-          value={selectedTech}
-          onChange={(e) => setSelectedTech(e.target.value)}
-          className="bg-slate-900/50 border border-white/10 rounded-lg px-4 py-2 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-white"
-        >
-          <option value="all">Tous les techniciens</option>
-          {uniqueTechs.slice(1).map(tech => (
-            <option key={tech} value={tech}>{tech}</option>
-          ))}
-        </select>
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-violet-400" />
+          </div>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Rechercher..."
+            className="block w-full pl-10 pr-4 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-white placeholder-slate-400 focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+          />
+        </div>
 
-        <select
-          value={selectedStatus}
-          onChange={(e) => setSelectedStatus(e.target.value)}
-          className="bg-slate-900/50 border border-white/10 rounded-lg px-4 py-2 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-white"
-        >
-          <option value="all">Tous les statuts</option>
-          <option value="urgent">Urgents</option>
-          <option value="normal">Non urgents</option>
-        </select>
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <MapPin className="h-5 w-5 text-violet-400" />
+          </div>
+          <select
+            value={selectedLocation}
+            onChange={(e) => setSelectedLocation(e.target.value)}
+            className="block w-full pl-10 pr-10 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-white focus:ring-2 focus:ring-violet-500 focus:border-violet-500 appearance-none cursor-pointer"
+          >
+            <option value="all">Toutes les localisations</option>
+            {Array.from(uniqueLocations).slice(1).map(location => (
+              <option key={location} value={location}>{location}</option>
+            ))}
+          </select>
+        </div>
 
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as any)}
-          className="bg-slate-900/50 border border-white/10 rounded-lg px-4 py-2 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 text-white"
-        >
-          <option value="date">Trier par date</option>
-          <option value="tech">Trier par technicien</option>
-          <option value="location">Trier par localisation</option>
-        </select>
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Filter className="h-5 w-5 text-violet-400" />
+          </div>
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            className="block w-full pl-10 pr-10 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-white focus:ring-2 focus:ring-violet-500 focus:border-violet-500 appearance-none cursor-pointer"
+          >
+            <option value="all">Tous les statuts</option>
+            <option value="urgent">Urgents</option>
+            <option value="normal">Non urgents</option>
+          </select>
+        </div>
+
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <SortAsc className="h-5 w-5 text-violet-400" />
+          </div>
+          <select
+            value={`${sortBy}-${sortOrder}`}
+            onChange={(e) => {
+              const [newSortBy, newSortOrder] = e.target.value.split('-') as [typeof sortBy, typeof sortOrder];
+              setSortBy(newSortBy);
+              setSortOrder(newSortOrder);
+            }}
+            className="block w-full pl-10 pr-10 py-2 bg-slate-900/50 border border-white/10 rounded-lg text-white focus:ring-2 focus:ring-violet-500 focus:border-violet-500 appearance-none cursor-pointer"
+          >
+            <option value="date-asc">Date (croissant)</option>
+            <option value="date-desc">Date (décroissant)</option>
+            <option value="tech-asc">Technicien (A-Z)</option>
+            <option value="tech-desc">Technicien (Z-A)</option>
+            <option value="location-asc">Localisation (A-Z)</option>
+            <option value="location-desc">Localisation (Z-A)</option>
+          </select>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {filteredAppointments.length > 0 ? (
-          filteredAppointments.map((appointment, index) => (
+        {paginatedAppointments.length > 0 ? (
+          paginatedAppointments.map((appointment, index) => (
             <AppointmentCard
               key={`${appointment['ENTETE']}-${index}`}
               appointment={appointment}
@@ -143,15 +202,21 @@ export function AppointmentView({ data }: AppointmentViewProps) {
         )}
       </div>
 
+      {filteredAppointments.length > ITEMS_PER_PAGE && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          itemsPerPage={ITEMS_PER_PAGE}
+          totalItems={filteredAppointments.length}
+        />
+      )}
+
       <div className="flex items-center justify-between text-sm text-slate-400 border-t border-white/5 pt-4">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
-            <Users className="h-4 w-4" />
-            <span>{uniqueTechs.length - 1} techniciens</span>
-          </div>
-          <div className="flex items-center space-x-2">
             <Calendar className="h-4 w-4" />
-            <span>{uniqueDates.length - 1} dates</span>
+            <span>{uniqueDates.size - 1} dates</span>
           </div>
           <div className="flex items-center space-x-2">
             <AlertCircle className="h-4 w-4" />
@@ -161,7 +226,7 @@ export function AppointmentView({ data }: AppointmentViewProps) {
           </div>
         </div>
         <div>
-          Total: {filteredAppointments.length} rendez-vous
+          Total : {filteredAppointments.length} rendez-vous
         </div>
       </div>
     </div>
