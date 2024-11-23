@@ -58,6 +58,17 @@ export default function App() {
           'Import réussi',
           `${formattedAppointments.length} rendez-vous ont été importés avec succès.`
         );
+
+        // Show PWA install info after successful import
+        if (!window.matchMedia('(display-mode: standalone)').matches) {
+          setTimeout(() => {
+            showInfo(
+              'Installation disponible',
+              'Installez l\'application pour un accès rapide et hors-ligne à vos rendez-vous.',
+              10000
+            );
+          }, 2000);
+        }
       } else {
         throw new Error("Format de fichier invalide");
       }
@@ -74,7 +85,7 @@ export default function App() {
       setImporting(false);
       setProgress(0);
     }
-  }, [showSuccess, showError]);
+  }, [showSuccess, showError, showInfo]);
 
   if (loading) {
     return <Preloader />;
