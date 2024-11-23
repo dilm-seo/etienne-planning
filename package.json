@@ -1,5 +1,5 @@
 {
-  "name": "excel-viewer",
+  "name": "forex-ai-analyzer",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -12,17 +12,16 @@
   "dependencies": {
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
-    "react-datepicker": "^6.2.0",
     "react-dom": "^18.3.1",
-    "react-dropzone": "^14.2.3",
-    "recharts": "^2.12.2",
-    "xlsx": "^0.18.5"
+    "axios": "^1.6.7",
+    "react-hot-toast": "^2.4.1",
+    "date-fns": "^3.3.1",
+    "react-query": "^3.39.3",
+    "zustand": "^4.5.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
-    "@tailwindcss/line-clamp": "^0.4.4",
     "@types/react": "^18.3.5",
-    "@types/react-datepicker": "^6.0.1",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.18",
