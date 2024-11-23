@@ -5,73 +5,82 @@ interface FetchError extends Error {
   type?: string;
 }
 
-const PROXY_URL = 'https://cors-anywhere.herokuapp.com/';
+// Utiliser un proxy CORS plus fiable
+const PROXY_URL = 'https://api.allorigins.win/raw?url=';
 const BASE_URL = 'https://etrace.cristalcloud.com/MODULES/Covea/livraison_export.php';
 
 export async function fetchAndParseExcel(technicien: string): Promise<any> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-    const url = `${PROXY_URL}${BASE_URL}?statut=&technicien=${encodeURIComponent(technicien)}`;
+    const encodedUrl = encodeURIComponent(`${BASE_URL}?statut=&technicien=${technicien}`);
+    const url = `${PROXY_URL}${encodedUrl}`;
     
     const response = await fetch(url, { 
       method: 'GET',
       headers: {
         'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Origin': window.location.origin,
-        'X-Requested-With': 'XMLHttpRequest'
+        'Origin': window.location.origin
       },
       signal: controller.signal,
-      mode: 'cors'
+      credentials: 'omit'
     });
     
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      const error: FetchError = new Error(
-        response.status === 401 
-          ? 'Veuillez vous connecter à eTRACE'
-          : response.status === 403
-          ? 'Accès non autorisé. Veuillez vous reconnecter.'
-          : response.status === 404
-          ? 'Fichier non trouvé'
-          : response.status >= 500
-          ? 'Erreur serveur. Veuillez réessayer plus tard.'
-          : 'Erreur lors du téléchargement du fichier'
-      );
+      let errorMessage = 'Erreur lors du téléchargement du fichier';
+      
+      switch (response.status) {
+        case 401:
+          errorMessage = 'Veuillez vous connecter à eTRACE';
+          break;
+        case 403:
+          errorMessage = 'Accès non autorisé. Veuillez vous reconnecter à eTRACE';
+          break;
+        case 404:
+          errorMessage = 'Fichier non trouvé';
+          break;
+        case 500:
+        case 502:
+        case 503:
+        case 504:
+          errorMessage = 'Le serveur eTRACE est temporairement indisponible';
+          break;
+      }
+
+      const error: FetchError = new Error(errorMessage);
       error.status = response.status;
       throw error;
     }
 
-    const contentType = response.headers.get('content-type');
-    if (!contentType?.includes('spreadsheet') && !contentType?.includes('octet-stream')) {
-      throw new Error('Le format du fichier n\'est pas valide');
-    }
-
     const buffer = await response.arrayBuffer();
     if (!buffer || buffer.byteLength === 0) {
-      throw new Error('Le fichier est vide');
+      throw new Error('Le fichier téléchargé est vide');
     }
 
-    return analyzeExcelFile(buffer);
+    try {
+      const data = analyzeExcelFile(buffer);
+      if (!data?.[0]?.data?.length) {
+        throw new Error('Le fichier ne contient pas de données valides');
+      }
+      return data;
+    } catch (parseError) {
+      console.error('Erreur lors de l\'analyse du fichier:', parseError);
+      throw new Error('Le format du fichier n\'est pas valide. Veuillez vérifier que vous êtes connecté à eTRACE.');
+    }
   } catch (error) {
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new Error('La requête a pris trop de temps. Veuillez vérifier votre connexion.');
+        throw new Error('Le téléchargement a pris trop de temps. Veuillez réessayer.');
       }
       
       if ((error as FetchError).type === 'network') {
         throw new Error('Erreur réseau. Veuillez vérifier votre connexion internet.');
       }
 
-      // Si l'erreur vient du proxy CORS
-      if ((error as FetchError).message.includes('cors-anywhere')) {
-        throw new Error('Erreur d\'accès au serveur. Veuillez réessayer plus tard.');
-      }
-
-      console.error('Erreur lors de la récupération du fichier:', error);
-      throw new Error(error.message || 'Une erreur est survenue lors de la récupération du fichier');
+      throw error;
     }
     throw new Error('Une erreur inattendue est survenue');
   }

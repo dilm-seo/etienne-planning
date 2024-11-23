@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, User, AlertTriangle } from 'lucide-react';
+import { Users, User, AlertTriangle, ExternalLink } from 'lucide-react';
 
 export const TECHNICIANS = [
   { id: '', name: 'Tous les techniciens', icon: Users },
@@ -33,15 +33,16 @@ export function TechnicianSelector({ onSelect, loading, progress }: TechnicianSe
               href="https://etrace.cristalcloud.com" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="underline hover:text-amber-200"
+              className="inline-flex items-center space-x-1 underline hover:text-amber-200"
             >
-              eTRACE
+              <span>eTRACE</span>
+              <ExternalLink className="h-4 w-4" />
             </a>
           </p>
         </div>
       </div>
       
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {TECHNICIANS.map(tech => {
           const Icon = tech.icon;
           return (
@@ -70,6 +71,21 @@ export function TechnicianSelector({ onSelect, loading, progress }: TechnicianSe
             </button>
           );
         })}
+      </div>
+
+      <div className="mt-8 text-center text-sm text-slate-400">
+        <p>
+          Si vous ne parvenez pas à charger les données, vous pouvez{' '}
+          <a 
+            href={`https://etrace.cristalcloud.com/MODULES/Covea/livraison_export.php?statut=`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-violet-400 hover:text-violet-300 underline"
+          >
+            télécharger le fichier manuellement
+          </a>
+          {' '}et l'importer ici.
+        </p>
       </div>
     </div>
   );
