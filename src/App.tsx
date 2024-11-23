@@ -17,6 +17,17 @@ export default function App() {
   const [appointments, setAppointments] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const { popups, showSuccess, showError, showInfo, showWarning, removePopup } = usePopups();
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -25,7 +36,7 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleFileData = useCallback((data: any) => {
+  const handleFileData = useCallback(async (data: any) => {
     try {
       setImporting(true);
       setProgress(0);
@@ -54,18 +65,31 @@ export default function App() {
         setFileData(data);
         setAppointments(formattedAppointments);
         setError(null);
+
         showSuccess(
           'Import réussi',
           `${formattedAppointments.length} rendez-vous ont été importés avec succès.`
         );
 
         // Show PWA install info after successful import
-        if (!window.matchMedia('(display-mode: standalone)').matches) {
+        if (deferredPrompt && !window.matchMedia('(display-mode: standalone)').matches) {
           setTimeout(() => {
             showInfo(
               'Installation disponible',
               'Installez l\'application pour un accès rapide et hors-ligne à vos rendez-vous.',
-              10000
+              10000,
+              async () => {
+                try {
+                  await deferredPrompt.prompt();
+                  const { outcome } = await deferredPrompt.userChoice;
+                  if (outcome === 'accepted') {
+                    showSuccess('Installation réussie', 'L\'application a été installée avec succès.');
+                  }
+                  setDeferredPrompt(null);
+                } catch (err) {
+                  console.error('Installation error:', err);
+                }
+              }
             );
           }, 2000);
         }
@@ -85,7 +109,7 @@ export default function App() {
       setImporting(false);
       setProgress(0);
     }
-  }, [showSuccess, showError, showInfo]);
+  }, [showSuccess, showError, showInfo, deferredPrompt]);
 
   if (loading) {
     return <Preloader />;
